@@ -12,4 +12,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 
-CMD ["python", "-m", "app.sync"]
+# Do not run sync on container start. Run sync manually, e.g. Railway: one-off job / cron, or
+# `railway run python -m app.sync` from a machine with the Railway CLI linked to this service.
+CMD ["sleep", "infinity"]
