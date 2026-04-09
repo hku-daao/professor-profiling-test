@@ -10,7 +10,11 @@ from app.config import SUPABASE_SERVICE_KEY, SUPABASE_URL
 
 def get_client() -> Client:
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set")
+        raise RuntimeError(
+            "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set in the process "
+            "environment (Railway: open the sync service → Variables → add both; "
+            "redeploy). Names are case-sensitive."
+        )
     return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 
