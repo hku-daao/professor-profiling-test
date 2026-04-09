@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import time
 from typing import Iterator
 
 import httpx
 
 from app.config import HKU_HUB_BASE, HTTP_TIMEOUT, REQUEST_DELAY_SEC, RESULTS_PER_PAGE
+
+log = logging.getLogger(__name__)
 from app.parsers import parse_pagination_max_start, parse_search_result_rows
 
 
@@ -29,11 +32,27 @@ class HKUHubClient:
         if REQUEST_DELAY_SEC > 0:
             time.sleep(REQUEST_DELAY_SEC)
 
-    def get_text(self, path: str, params: dict | None = None) -> str:
-        self._sleep()
-        r = self._client.get(path, params=params)
-        r.raise_for_status()
-        return r.text
+    def get_text(self, path: str, params: dict | None = None, *, retries: int = 3) -> str:
+        last_exc: BaseException | None = None
+        for attempt in range(retries):
+            try:
+                self._sleep()
+                r = self._client.get(path, params=params)
+                r.raise_for_status()
+                return r.text
+            except (httpx.HTTPError, httpx.TransportError) as e:
+                last_exc = e
+                log.warning(
+                    "HTTP %s/%s failed for %s: %s",
+                    attempt + 1,
+                    retries,
+                    path,
+                    e,
+                )
+                if attempt < retries - 1:
+                    time.sleep(min(8.0, 2.0**attempt))
+        assert last_exc is not None
+        raise last_exc
 
     def iter_all_staff_listings(self) -> Iterator[dict]:
         rpp = RESULTS_PER_PAGE

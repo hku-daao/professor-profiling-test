@@ -76,6 +76,26 @@ def parse_publications(html_text: str) -> list[dict[str, str]]:
     return out
 
 
+def parse_item_abstract(html_text: str) -> str:
+    """DSpace item page (/handle/...): abstract in metadata table rows."""
+    soup = BeautifulSoup(html_text, "html.parser")
+    dc_description_abstract = ""
+    for tr in soup.select("tr"):
+        cells = tr.find_all(["th", "td"])
+        if len(cells) < 2:
+            continue
+        label = html.unescape(cells[0].get_text(strip=True))
+        val = html.unescape(cells[1].get_text(" ", strip=True))
+        if not val or val.strip() == "-":
+            continue
+        ll = label.lower()
+        if ll == "abstract":
+            return val
+        if ll == "dc.description.abstract":
+            dc_description_abstract = val
+    return dc_description_abstract
+
+
 def parse_grants(html_text: str) -> list[dict[str, str]]:
     soup = BeautifulSoup(html_text, "html.parser")
     out: list[dict[str, str]] = []

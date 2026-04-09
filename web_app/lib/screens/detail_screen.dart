@@ -125,11 +125,47 @@ class _PublicationsTab extends StatelessWidget {
         final title = pub['title']?.toString() ?? '';
         final journal = pub['journal']?.toString() ?? '';
         final date = pub['issue_date']?.toString() ?? '';
+        final abstract = pub['abstract']?.toString() ?? '';
         final url = pub['url']?.toString();
+        final meta = [
+          if (journal.isNotEmpty) journal,
+          if (date.isNotEmpty) date,
+        ].join(' · ');
+        if (abstract.isNotEmpty) {
+          return ExpansionTile(
+            title: Text(title, maxLines: 3, overflow: TextOverflow.ellipsis),
+            subtitle: meta.isEmpty ? null : Text(meta, maxLines: 2, overflow: TextOverflow.ellipsis),
+            children: [
+              if (url != null && url.isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.open_in_new),
+                  title: const Text('Open HKU item page'),
+                  onTap: () => onOpen(url),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Abstract', style: Theme.of(context).textTheme.titleSmall),
+                      const SizedBox(height: 6),
+                      SelectableText(
+                        abstract,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
         return ListTile(
           title: Text(title, maxLines: 3, overflow: TextOverflow.ellipsis),
           subtitle: Text(
-            [if (journal.isNotEmpty) journal, if (date.isNotEmpty) date].join(' · '),
+            meta,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
