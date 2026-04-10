@@ -15,3 +15,8 @@ REQUEST_DELAY_SEC = float(os.environ.get("REQUEST_DELAY_SEC", "0.35"))
 HTTP_TIMEOUT = float(os.environ.get("HTTP_TIMEOUT", "60"))
 RESULTS_PER_PAGE = int(os.environ.get("RPP", "100"))
 MAX_PROFESSORS = int(os.environ.get("MAX_PROFESSORS", "0"))
+FETCH_GRANT_DETAILS = os.environ.get("FETCH_GRANT_DETAILS", "true").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+)

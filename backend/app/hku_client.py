@@ -85,3 +85,7 @@ class HKUHubClient:
 
     def fetch_profile_tab(self, cris_rp_id: str, tab: str) -> str:
         return self.get_text(f"/cris/rp/{cris_rp_id}/{tab}.html", params={"onlytab": "true"})
+
+    def fetch_grants_page(self, cris_rp_id: str) -> str:
+        """Full grants page (PI + Co-I tables). Prefer over onlytab fragment for complete grant rows."""
+        return self.get_text(f"/cris/rp/{cris_rp_id}/grants.html")

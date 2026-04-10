@@ -7,10 +7,11 @@ from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 
-from app.config import HKU_HUB_BASE, MAX_PROFESSORS
+from app.config import FETCH_GRANT_DETAILS, HKU_HUB_BASE, MAX_PROFESSORS
 from app.hku_client import HKUHubClient
 from app.parsers import (
     parse_generic_sections,
+    parse_grant_project_detail,
     parse_grants,
     parse_item_abstract,
     parse_namecard,
@@ -24,6 +25,19 @@ logging.basicConfig(
     stream=sys.stdout,
 )
 log = logging.getLogger(__name__)
+
+
+def _project_path_on_hub(project_url: str) -> str | None:
+    p = urlparse((project_url or "").strip())
+    base_host = urlparse(HKU_HUB_BASE).netloc
+    host = p.netloc or base_host
+    if host != base_host:
+        return None
+    path = (p.path or "").split("?")[0].rstrip("/")
+    if not path.startswith("/cris/project/"):
+        return None
+    slug = path.removeprefix("/cris/project/").strip("/")
+    return path if slug else None
 
 
 def _handle_path_on_hub(pub_url: str) -> str | None:
@@ -52,7 +66,30 @@ def _attach_publication_abstracts(hub: HKUHubClient, pubs: list[dict[str, str]])
             log.debug("Abstract fetch failed for %s: %s", path, e)
 
 
-def enrich_and_save(client_hub: HKUHubClient, sb, listing: dict, *, details: bool) -> None:
+def _attach_grant_details(hub: HKUHubClient, grants: list) -> None:
+    for g in grants:
+        url = (g.get("url") or "").strip() or (g.get("project_code_url") or "").strip()
+        path = _project_path_on_hub(url)
+        if not path:
+            continue
+        try:
+            proj_html = hub.get_text(path)
+            detail = parse_grant_project_detail(proj_html)
+            for k, val in detail.items():
+                if val:
+                    g[k] = val
+        except Exception as e:
+            log.debug("Grant detail fetch failed for %s: %s", path, e)
+
+
+def enrich_and_save(
+    client_hub: HKUHubClient,
+    sb,
+    listing: dict,
+    *,
+    details: bool,
+    grant_details_override: bool | None = None,
+) -> None:
     cris_id = listing["cris_rp_id"]
     profile_url = f"{HKU_HUB_BASE}/cris/rp/{cris_id}"
 
@@ -89,13 +126,21 @@ def enrich_and_save(client_hub: HKUHubClient, sb, listing: dict, *, details: boo
     ach_html = client_hub.fetch_profile_tab(cris_id, "achievements")
     row["university_responsibilities"] = parse_generic_sections(ach_html)
 
-    grants_html = client_hub.fetch_profile_tab(cris_id, "grants")
+    grants_html = client_hub.fetch_grants_page(cris_id)
     row["grants"] = parse_grants(grants_html)
+    fetch_grant_pages = FETCH_GRANT_DETAILS if grant_details_override is None else grant_details_override
+    if fetch_grant_pages:
+        _attach_grant_details(client_hub, row["grants"])
 
     upsert_professor(sb, row)
 
 
-def run(*, list_only: bool = False, max_n: int | None = None) -> None:
+def run(
+    *,
+    list_only: bool = False,
+    max_n: int | None = None,
+    grant_details_override: bool | None = None,
+) -> None:
     limit = max_n if max_n is not None else (MAX_PROFESSORS or None)
     sb = get_client()
     hub = HKUHubClient()
@@ -109,7 +154,13 @@ def run(*, list_only: bool = False, max_n: int | None = None) -> None:
                 break
             processed += 1
             try:
-                enrich_and_save(hub, sb, listing, details=not list_only)
+                enrich_and_save(
+                    hub,
+                    sb,
+                    listing,
+                    details=not list_only,
+                    grant_details_override=grant_details_override,
+                )
                 ok += 1
             except Exception as e:
                 msg = f"{type(e).__name__}: {e}"
@@ -155,12 +206,22 @@ def main() -> None:
         action="store_true",
         help="Log debug messages and tracebacks for each failed profile",
     )
+    p.add_argument(
+        "--no-grant-details",
+        action="store_true",
+        help="Skip fetching /cris/project/… for each grant (overrides FETCH_GRANT_DETAILS env)",
+    )
     args = p.parse_args()
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
         log.setLevel(logging.DEBUG)
         logging.getLogger("app.hku_client").setLevel(logging.DEBUG)
-    run(list_only=args.list_only, max_n=args.max)
+    grant_override = False if args.no_grant_details else None
+    run(
+        list_only=args.list_only,
+        max_n=args.max,
+        grant_details_override=grant_override,
+    )
 
 
 if __name__ == "__main__":

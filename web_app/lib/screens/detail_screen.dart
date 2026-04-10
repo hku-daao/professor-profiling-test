@@ -221,6 +221,49 @@ class _SectionsTab extends StatelessWidget {
   }
 }
 
+List<Widget> _grantDetailFields(Map<String, dynamic> g) {
+  const spec = <(String, String)>[
+    ('principal_investigator', 'Principal investigator'),
+    ('duration', 'Duration'),
+    ('start_date', 'Start date'),
+    ('completion_date', 'Completion date'),
+    ('grant_type', 'Grant type'),
+    ('discipline', 'Discipline'),
+    ('panel', 'Panel'),
+    ('keywords', 'Keywords'),
+    ('conference_title', 'Conference title'),
+    ('objectives', 'Objectives'),
+    ('project_title', 'Project title'),
+    ('hku_project_code', 'HKU project code'),
+    ('funding_year', 'Funding year'),
+    ('status', 'Status'),
+    ('amount', 'Amount'),
+  ];
+  final out = <Widget>[];
+  for (final row in spec) {
+    final v = g[row.$1]?.toString().trim();
+    if (v == null || v.isEmpty) continue;
+    out.add(
+      Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: SelectableText.rich(
+          TextSpan(
+            style: const TextStyle(height: 1.35),
+            children: [
+              TextSpan(
+                text: '${row.$2}: ',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              TextSpan(text: v),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  return out;
+}
+
 class _GrantsTab extends StatelessWidget {
   const _GrantsTab({required this.grants, required this.onOpen});
 
@@ -238,18 +281,52 @@ class _GrantsTab extends StatelessWidget {
       separatorBuilder: (context, index) => const Divider(height: 1),
       itemBuilder: (context, i) {
         final g = grants[i];
-        final title = g['title']?.toString() ?? '';
+        final title = (g['title'] ?? g['project_title'])?.toString() ?? '';
         final code = g['project_code']?.toString() ?? '';
         final year = g['funding_year']?.toString() ?? '';
         final status = g['status']?.toString() ?? '';
+        final rawRole = g['grant_role']?.toString() ?? '';
+        final roleLabel = switch (rawRole) {
+          'principal_investigator' => 'PI',
+          'co_investigator' => 'Co-I',
+          'unknown' => '',
+          _ when rawRole.isNotEmpty => rawRole,
+          _ => '',
+        };
         final url = g['url']?.toString();
-        return ListTile(
+        final details = _grantDetailFields(g);
+        return ExpansionTile(
           title: Text(title, maxLines: 3, overflow: TextOverflow.ellipsis),
-          subtitle: Text([status, code, year].where((x) => x.isNotEmpty).join(' · ')),
-          trailing: url != null && url.isNotEmpty
-              ? IconButton(icon: const Icon(Icons.link), onPressed: () => onOpen(url))
-              : null,
-          onTap: url != null && url.isNotEmpty ? () => onOpen(url) : null,
+          subtitle: Text(
+            [roleLabel, status, code, year].where((x) => x.isNotEmpty).join(' · '),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ...details,
+                  if (details.isEmpty)
+                    const Text(
+                      'Run a full sync with FETCH_GRANT_DETAILS=true to load project-page fields.',
+                      style: TextStyle(fontStyle: FontStyle.italic),
+                    ),
+                  if (url != null && url.isNotEmpty)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () => onOpen(url),
+                        icon: const Icon(Icons.open_in_new, size: 18),
+                        label: const Text('Open project page'),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
         );
       },
     );

@@ -96,11 +96,14 @@ def parse_item_abstract(html_text: str) -> str:
     return dc_description_abstract
 
 
-def parse_grants(html_text: str) -> list[dict[str, str]]:
-    soup = BeautifulSoup(html_text, "html.parser")
+def _parse_grant_table_rows(
+    soup: BeautifulSoup,
+    table_selector: str,
+    grant_role: str,
+    seen: set[str],
+) -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
-    seen_urls: set[str] = set()
-    for tr in soup.select("table.table tbody tr"):
+    for tr in soup.select(f"{table_selector} tbody tr"):
         tds = tr.find_all("td")
         if len(tds) < 5:
             continue
@@ -111,11 +114,13 @@ def parse_grants(html_text: str) -> list[dict[str, str]]:
         if not title_a:
             continue
         url = _abs_url(title_a["href"]) if title_a.get("href") else ""
-        if url in seen_urls:
+        key = f"{grant_role}|{url}" if url else f"{grant_role}|{title_a.get_text(' ', strip=True)}"
+        if key in seen:
             continue
-        seen_urls.add(url)
+        seen.add(key)
         out.append(
             {
+                "grant_role": grant_role,
                 "status": status,
                 "project_code": html.unescape(code_a.get_text(strip=True)) if code_a else "",
                 "project_code_url": _abs_url(code_a["href"]) if code_a and code_a.get("href") else "",
@@ -125,6 +130,111 @@ def parse_grants(html_text: str) -> list[dict[str, str]]:
                 "funding_year": html.unescape(tds[4].get_text(" ", strip=True)),
             }
         )
+    return out
+
+
+def parse_grants(html_text: str) -> list[dict[str, str]]:
+    """
+    HKU grants tab: two sub-sections — Principal Investigator and Co-Investigator — each with its own table
+    (classes ncrisprojectprincipalinvestigator / ncrisprojectcoinvestigator). Also accept legacy table.table markup.
+    """
+    soup = BeautifulSoup(html_text, "html.parser")
+    seen: set[str] = set()
+
+    out: list[dict[str, str]] = []
+    out.extend(
+        _parse_grant_table_rows(
+            soup,
+            "table.ncrisprojectprincipalinvestigator",
+            "principal_investigator",
+            seen,
+        )
+    )
+    out.extend(
+        _parse_grant_table_rows(
+            soup,
+            "table.ncrisprojectcoinvestigator",
+            "co_investigator",
+            seen,
+        )
+    )
+
+    # Legacy / fallback: bootstrap .table rows not matched above (same 5-column layout)
+    for tr in soup.select("table.table tbody tr"):
+        tbl = tr.find_parent("table")
+        if tbl and tbl.get("class"):
+            cl = " ".join(tbl["class"]) if isinstance(tbl["class"], list) else str(tbl["class"])
+            if "ncrisproject" in cl:
+                continue
+        tds = tr.find_all("td")
+        if len(tds) < 5:
+            continue
+        status_div = tds[0].select_one(".dctype")
+        status = status_div.get("title", "") if status_div else ""
+        code_a = tds[1].select_one("a")
+        title_a = tds[2].select_one("a")
+        if not title_a:
+            continue
+        url = _abs_url(title_a["href"]) if title_a.get("href") else ""
+        key = f"unknown|{url}" if url else f"unknown|{title_a.get_text(' ', strip=True)}"
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(
+            {
+                "grant_role": "unknown",
+                "status": status,
+                "project_code": html.unescape(code_a.get_text(strip=True)) if code_a else "",
+                "project_code_url": _abs_url(code_a["href"]) if code_a and code_a.get("href") else "",
+                "title": html.unescape(title_a.get_text(" ", strip=True)),
+                "url": url,
+                "amount": html.unescape(tds[3].get_text(" ", strip=True)),
+                "funding_year": html.unescape(tds[4].get_text(" ", strip=True)),
+            }
+        )
+    return out
+
+
+def parse_grant_project_detail(html_text: str) -> dict[str, str]:
+    """
+    Fields from /cris/project/{id} → Grant Data panel (HKU Scholars Hub).
+    """
+    soup = BeautifulSoup(html_text, "html.parser")
+    panel = soup.select_one("#content-grantdata-grantdata .panel-body")
+    if not panel:
+        return {}
+
+    label_keys = {
+        "Project Title": "project_title",
+        "Principal Investigator": "principal_investigator",
+        "Duration": "duration",
+        "Start Date": "start_date",
+        "Completion Date": "completion_date",
+        "Amount": "amount",
+        "Conference Title": "conference_title",
+        "Keywords": "keywords",
+        "Discipline": "discipline",
+        "Panel": "panel",
+        "HKU Project Code": "hku_project_code",
+        "Grant Type": "grant_type",
+        "Funding Year": "funding_year",
+        "Status": "status",
+        "Objectives": "objectives",
+    }
+
+    out: dict[str, str] = {}
+    for row in panel.select("div.row"):
+        label_el = row.select_one(".col-xs-3 strong, .col-sm-3 strong, .col-md-3 strong")
+        val_col = row.select_one(".col-xs-9, .col-sm-9, .col-md-9")
+        if not label_el or not val_col:
+            continue
+        label = html.unescape(label_el.get_text(strip=True))
+        key = label_keys.get(label)
+        if not key:
+            continue
+        text = html.unescape(re.sub(r"\s+", " ", val_col.get_text(" ", strip=True)))
+        if text and text != "-":
+            out[key] = text
     return out
 
 

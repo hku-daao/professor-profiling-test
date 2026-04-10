@@ -1,0 +1,16 @@
+{
+  "projects": {
+    "default": "daao-a20c6",
+    "daao": "daao-a20c6",
+    "DAAO": "daao-a20c6",
+    "prof_info": "daao-a20c6"
+  },
+  "targets": {
+    "daao-a20c6": {
+      "hosting": {
+        "profiling": ["professor-profiling-test"]
+      }
+    }
+  },
+  "etags": {}
+}
